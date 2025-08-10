@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PDF Viewer on GitHub Pages</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    #toolbar { padding: 10px; background: #eee; display: flex; align-items: center; gap: 8px; }
+    #toolbar button { padding: 6px 12px; font-size: 14px; cursor: pointer; }
+    #page-info { margin-left: 10px; font-weight: bold; }
+    #canvas-container { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; background: #ccc; padding: 12px; }
+    canvas { box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
+  </style>
+  <!-- PDF.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="prev">◀ Prev</button>
+    <button id="next">Next ▶</button>
+    <span id="page-info">Page <span id="page-num">0</span> / <span id="page-count">0</span></span>
+    <button id="zoom-out" style="margin-left: 20px;">− Zoom Out</button>
+    <button id="zoom-in">+ Zoom In</button>
+    <span id="zoom-level" style="margin-left: 10px;">100%</span>
+  </div>
+  <div id="canvas-container">
+    <canvas id="pdf-canvas"></canvas>
+  </div>
+
+  <script>
+    // Configure PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+    // PDF file name in the same repo
+    const pdfUrl = './Chapter%20IV%20Section%20B%20by%20Dr%20Aung%20(2).pdf';
+
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const pageNumElem = document.getElementById('page-num');
+    const pageCountElem = document.getElementById('page-count');
+    const zoomLevelElem = document.getElementById('zoom-level');
+
+    let pdfDoc = null;
+    let pageNum = 1;
+    let scale = 1.0;
+    let rendering = false;
+    let pageNumPending = null;
+
+    async function renderPage(num) {
+      rendering = true;
+      const page = await pdfDoc.getPage(num);
+      const viewport = page.getViewport({ scale });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+      };
+
+      await page.render(renderContext).promise;
+
+      pageNumElem.textContent = num;
+      zoomLevelElem.textContent = Math.round(scale * 100) + '%';
+
+      rendering = false;
+      if (pageNumPending !== null) {
+        renderPage(pageNumPending);
+        pageNumPending = null;
+      }
+    }
+
+    function queueRenderPage(num) {
+      if (rendering) {
+        pageNumPending = num;
+      } else {
+        renderPage(num);
+      }
+    }
+
+    async function loadPdf(url) {
+      try {
+        pdfDoc = await pdfjsLib.getDocument(url).promise;
+        pageCountElem.textContent = pdfDoc.numPages;
+        pageNum = 1;
+        queueRenderPage(pageNum);
+      } catch (error) {
+        alert('Error loading PDF: ' + error.message);
+      }
+    }
+
+    document.getElementById('prev').addEventListener('click', () => {
+      if (pageNum <= 1) return;
+      pageNum--;
+      queueRenderPage(pageNum);
+    });
+
+    document.getElementById('next').addEventListener('click', () => {
+      if (pageNum >= pdfDoc.numPages) return;
+      pageNum++;
+      queueRenderPage(pageNum);
+    });
+
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      scale = Math.min(scale + 0.25, 3);
+      queueRenderPage(pageNum);
+    });
+
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      scale = Math.max(scale - 0.25, 0.5);
+      queueRenderPage(pageNum);
+    });
+
+    // Load the PDF on page load
+    loadPdf(pdfUrl);
+  </script>
+</body>
+</html>
